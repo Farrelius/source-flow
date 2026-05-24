@@ -174,10 +174,17 @@
 
         <section class="bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col h-[300px]">
           <div class="p-4 border-b border-zinc-800 bg-zinc-900/50 rounded-t-xl">
-            <div class="relative">
-              <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600"></i>
-              <input id="fileSearch" type="text" placeholder="Filter files..."
-                class="w-full bg-zinc-950 border border-zinc-800 rounded-md py-1.5 pl-10 pr-4 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <div class="flex gap-2">
+              <div class="relative flex-grow">
+                <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600"></i>
+                <input id="fileSearch" type="text" placeholder="Filter files..."
+                  class="w-full bg-zinc-950 border border-zinc-800 rounded-md py-1.5 pl-10 pr-4 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+              </div>
+              <button id="globalToggleBtn" onclick="toggleAllFilesGlobal()" 
+                class="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md px-2.5 transition-colors border border-zinc-700"
+                title="Check/Uncheck All Visible Files">
+                <i id="globalToggleIcon" data-lucide="check-square" class="w-4 h-4"></i>
+              </button>
             </div>
           </div>
           <div id="fileList" class="flex-grow overflow-y-auto custom-scrollbar p-2 space-y-1">
@@ -312,7 +319,7 @@
     let projectName = "Project";
     let folderStates = {};
 
-    // --- FIX 2: DEBOUNCE FUNCTION ---
+    // --- DEBOUNCE FUNCTION ---
     function debounce(func, timeout = 300) {
       let timer;
       return (...args) => {
@@ -365,7 +372,6 @@
         } else {
           const ext = entry.name.substring(entry.name.lastIndexOf('.')).toLowerCase();
           if (!EXCLUDED_EXTENSIONS.includes(ext)) {
-            // --- FIX 3: STORE HANDLE INSTEAD OF SNAPSHOT ---
             allFiles.push({ name: entry.name, path: entryPath, handle: entry });
             selectedFiles.add(entryPath);
           }
@@ -380,7 +386,6 @@
         return;
       }
 
-      // Kelompokkan file berdasarkan folder
       const tree = {};
       const query = document.getElementById('fileSearch').value.toLowerCase();
 
@@ -394,6 +399,14 @@
         if (!tree[folderPath]) tree[folderPath] = [];
         tree[folderPath].push({ ...file, fileName });
       });
+
+      // Update Global Toggle Icon State berdasarkan file yang terlihat saat ini
+      const visibleFiles = allFiles.filter(f => f.path.toLowerCase().includes(query));
+      const allVisibleChecked = visibleFiles.length > 0 && visibleFiles.every(f => selectedFiles.has(f.path));
+      const globalToggleIcon = document.getElementById('globalToggleIcon');
+      if (globalToggleIcon) {
+        globalToggleIcon.setAttribute('data-lucide', allVisibleChecked ? 'check-square' : 'square');
+      }
 
       fileList.innerHTML = Object.keys(tree).map(folder => {
         const isCollapsed = folderStates[folder] === false;
@@ -432,7 +445,6 @@
       lucide.createIcons();
     }
 
-    // Fungsi bantu untuk Folder
     function toggleFolderCollapse(folder) {
       folderStates[folder] = folderStates[folder] === false;
       renderFileList();
@@ -452,6 +464,25 @@
 
     function toggleFile(path) {
       selectedFiles.has(path) ? selectedFiles.delete(path) : selectedFiles.add(path);
+      renderFileList();
+      processFiles();
+    }
+
+    function toggleAllFilesGlobal() {
+      if (allFiles.length === 0) return;
+      const query = document.getElementById('fileSearch').value.toLowerCase();
+      const visibleFiles = allFiles.filter(f => f.path.toLowerCase().includes(query));
+      const allChecked = visibleFiles.every(f => selectedFiles.has(f.path));
+
+      visibleFiles.forEach(file => {
+        if (allChecked) {
+          selectedFiles.delete(file.path);
+        } else {
+          selectedFiles.add(file.path);
+        }
+      });
+
+      renderFileList();
       processFiles();
     }
 
@@ -460,7 +491,6 @@
       const sysPrompt = document.getElementById('systemPrompt').value;
       const files = allFiles.filter(f => selectedFiles.has(f.path));
 
-      // --- FIX 3 (CONT.): FETCH FRESH FILE CONTENT ---
       for (const f of files) {
         try {
           const fileObj = await f.handle.getFile();
@@ -470,10 +500,8 @@
       }
 
       fragments = [];
-      // --- FIX 1: RESET INDEX ON EMPTY ---
       if (!combined) { activeTabIndex = 0; renderTabs(); return; }
 
-      // --- FIX 4: SMART SLICING (NEWLINE AWARE) ---
       for (let i = 0; i < combined.length;) {
         let end = i + MAX_CHARS;
         if (end < combined.length) {
@@ -486,7 +514,6 @@
         i = end;
       }
 
-      // --- FIX 1 (CONT.): PREVENT OUT OF BOUNDS ---
       if (activeTabIndex >= fragments.length) {
         activeTabIndex = Math.max(0, fragments.length - 1);
       }
@@ -517,6 +544,7 @@
       updateStats(e.target.value.length);
     });
 
+    document.getElementById('renderTabs')
     function renderTabs() {
       const container = document.getElementById('tabContainer');
       if (fragments.length === 0) {
@@ -543,7 +571,6 @@
 
     document.getElementById('selectDirBtn').addEventListener('click', scanDirectory);
     document.getElementById('fileSearch').addEventListener('input', renderFileList);
-    // --- FIX 2 (CONT.): USE DEBOUNCED VERSION ---
     document.getElementById('systemPrompt').addEventListener('input', debouncedProcess);
 
     document.getElementById('copyBtn').addEventListener('click', async () => {
